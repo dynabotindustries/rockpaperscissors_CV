@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking Rock Paper Scissors</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #2c3e50; color: white; }
+        .container { position: relative; display: inline-block; margin-top: 20px; }
+        video, canvas { border-radius: 10px; transform: rotateY(180deg); }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .stats { display: flex; justify-content: space-around; font-size: 1.5rem; margin: 20px; }
+        .status-box { background: rgba(0,0,0,0.6); padding: 15px; border-radius: 10px; margin: 10px auto; width: 60%; }
+        #gesture-output { font-weight: bold; color: #f1c40f; font-size: 2rem; }
+        .countdown { font-size: 5rem; color: #e74c3c; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>AI Rock Paper Scissors, brought to you by the GOAT - Darshan</h1>
+    <div class="stats">
+        <div>Player: <span id="player-score">0</span></div>
+        <div>AI: <span id="ai-score">0</span></div>
+    </div>
+
+    <div class="status-box">
+        <p id="status-text">Loading AI...</p>
+        <p id="gesture-output">Detected: -</p>
+        <button id="start-btn" onclick="startGame()" disabled style="padding: 10px 20px; font-size: 1.2rem; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 5px;">Start Game</button>
+    </div>
+
+    <div class="container">
+        <video id="input_video" style="display:none"></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+        <div id="countdown-display" class="countdown"></div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const gestureOutput = document.getElementById('gesture-output');
+        const statusText = document.getElementById('status-text');
+        const startBtn = document.getElementById('start-btn');
+        const countdownDisplay = document.getElementById('countdown-display');
+        
+        let playerScore = 0;
+        let aiScore = 0;
+        let gameState = 'IDLE'; 
+        let currentGesture = 'Unknown';
+        let countdownValue = 3;
+
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+                drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+                
+                currentGesture = detectGesture(landmarks);
+                if (gameState === 'IDLE') {
+                    gestureOutput.innerText = `Detected: ${currentGesture}`;
+                }
+            } else {
+                currentGesture = 'Unknown';
+                if (gameState === 'IDLE') gestureOutput.innerText = "Detected: -";
+            }
+            canvasCtx.restore();
+        }
+
+        function detectGesture(landmarks) {
+            // Check if fingers are extended (Tip y < PIP y)
+            const indexOpen = landmarks[8].y < landmarks[6].y;
+            const middleOpen = landmarks[12].y < landmarks[10].y;
+            const ringOpen = landmarks[16].y < landmarks[14].y;
+            const pinkyOpen = landmarks[20].y < landmarks[18].y;
+
+            if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) return "Rock";
+            if (indexOpen && middleOpen && ringOpen && pinkyOpen) return "Paper";
+            if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) return "Scissors";
+            return "Unknown";
+        }
+
+        function startGame() {
+            if (gameState !== 'IDLE') return;
+            gameState = 'COUNTDOWN';
+            startBtn.disabled = true;
+            countdownValue = 3;
+            countdownDisplay.style.display = 'block';
+            
+            let timer = setInterval(() => {
+                countdownDisplay.innerText = countdownValue;
+                if (countdownValue === 0) {
+                    clearInterval(timer);
+                    countdownDisplay.style.display = 'none';
+                    playRound();
+                }
+                countdownValue--;
+            }, 1000);
+        }
+
+        function playRound() {
+            const moves = ['Rock', 'Paper', 'Scissors'];
+            const aiMove = moves[Math.floor(Math.random() * 3)];
+            const playerMove = currentGesture;
+            let result = "";
+
+            if (playerMove === 'Unknown') {
+                result = "No hand detected! Try again.";
+            } else if (playerMove === aiMove) {
+                result = `Draw! Both chose ${playerMove}`;
+            } else if (
+                (playerMove === 'Rock' && aiMove === 'Scissors') ||
+                (playerMove === 'Paper' && aiMove === 'Rock') ||
+                (playerMove === 'Scissors' && aiMove === 'Paper')
+            ) {
+                result = `You Win! ${playerMove} beats ${aiMove}`;
+                playerScore++;
+                document.getElementById('player-score').innerText = playerScore;
+            } else {
+                result = `You Lose! ${aiMove} beats ${playerMove}`;
+                aiScore++;
+                document.getElementById('ai-score').innerText = aiScore;
+            }
+
+            statusText.innerText = result;
+            gameState = 'IDLE';
+            startBtn.disabled = false;
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+        
+        startBtn.disabled = false;
+        statusText.innerText = "Ready to Play!";
+    </script>
+</body>
+</html>
