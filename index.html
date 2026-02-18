@@ -9,18 +9,21 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #2c3e50; color: white; }
-        .container { position: relative; display: inline-block; margin-top: 20px; }
-        video, canvas { border-radius: 10px; transform: rotateY(180deg); }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .game-board { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+        .panel { display: flex; flex-direction: column; align-items: center; }
+        .video-wrapper { position: relative; border-radius: 10px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .ai-view { width: 640px; height: 480px; background: #34495e; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 12rem; box-shadow: 0 0 20px rgba(0,0,0,0.5); border: 2px solid #ecf0f1; }
+        video, canvas { display: block; transform: rotateY(180deg); }
         .stats { display: flex; justify-content: space-around; font-size: 1.5rem; margin: 20px; }
         .status-box { background: rgba(0,0,0,0.6); padding: 15px; border-radius: 10px; margin: 10px auto; width: 60%; }
         #gesture-output { font-weight: bold; color: #f1c40f; font-size: 2rem; }
-        .countdown { font-size: 5rem; color: #e74c3c; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); display: none; }
+        .countdown { font-size: 8rem; color: #e74c3c; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; text-shadow: 2px 2px 4px #000; z-index: 10; }
+        .footer { margin-top: 50px; padding: 20px; font-size: 1.2rem; color: #bdc3c7; border-top: 1px solid #34495e; }
     </style>
 </head>
 <body>
 
-    <h1>AI Rock Paper Scissors, brought to you by the GOAT - Darshan</h1>
+    <h1>AI Rock Paper Scissors</h1>
     <div class="stats">
         <div>Player: <span id="player-score">0</span></div>
         <div>AI: <span id="ai-score">0</span></div>
@@ -32,10 +35,25 @@
         <button id="start-btn" onclick="startGame()" disabled style="padding: 10px 20px; font-size: 1.2rem; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 5px;">Start Game</button>
     </div>
 
-    <div class="container">
-        <video id="input_video" style="display:none"></video>
-        <canvas id="output_canvas" width="640" height="480"></canvas>
-        <div id="countdown-display" class="countdown"></div>
+    <div class="game-board">
+        <div class="panel">
+            <h2>You</h2>
+            <div class="video-wrapper">
+                <video id="input_video" style="display:none"></video>
+                <canvas id="output_canvas" width="640" height="480"></canvas>
+                <div id="countdown-display" class="countdown"></div>
+            </div>
+        </div>
+        <div class="panel">
+            <h2>AI Opponent</h2>
+            <div class="ai-view">
+                <span id="ai-emoji">🤖</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Made by Darshan</p>
     </div>
 
     <script>
@@ -46,12 +64,14 @@
         const statusText = document.getElementById('status-text');
         const startBtn = document.getElementById('start-btn');
         const countdownDisplay = document.getElementById('countdown-display');
+        const aiEmoji = document.getElementById('ai-emoji');
         
         let playerScore = 0;
         let aiScore = 0;
         let gameState = 'IDLE'; 
         let currentGesture = 'Unknown';
         let countdownValue = 3;
+        let aiShuffleInterval;
 
         function onResults(results) {
             canvasCtx.save();
@@ -94,6 +114,14 @@
             countdownValue = 3;
             countdownDisplay.style.display = 'block';
             
+            // Start AI shuffling animation
+            const emojis = ['✊', '✋', '✌️'];
+            let shuffleIdx = 0;
+            aiShuffleInterval = setInterval(() => {
+                aiEmoji.innerText = emojis[shuffleIdx % 3];
+                shuffleIdx++;
+            }, 150);
+            
             let timer = setInterval(() => {
                 countdownDisplay.innerText = countdownValue;
                 if (countdownValue === 0) {
@@ -109,6 +137,11 @@
             const moves = ['Rock', 'Paper', 'Scissors'];
             const aiMove = moves[Math.floor(Math.random() * 3)];
             const playerMove = currentGesture;
+            
+            clearInterval(aiShuffleInterval);
+            const emojiMap = {'Rock': '✊', 'Paper': '✋', 'Scissors': '✌️'};
+            aiEmoji.innerText = emojiMap[aiMove];
+
             let result = "";
 
             if (playerMove === 'Unknown') {
