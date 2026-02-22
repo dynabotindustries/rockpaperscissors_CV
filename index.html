@@ -7,18 +7,30 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #2c3e50; color: white; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: linear-gradient(135deg, #2c3e50, #4ca1af); color: white; margin: 0; padding: 20px; min-height: 100vh; }
         .game-board { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
-        .panel { display: flex; flex-direction: column; align-items: center; }
-        .video-wrapper { position: relative; border-radius: 10px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .ai-view { width: 640px; height: 480px; background: #34495e; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 12rem; box-shadow: 0 0 20px rgba(0,0,0,0.5); border: 2px solid #ecf0f1; }
-        video, canvas { display: block; transform: rotateY(180deg); }
+        .panel { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 640px; }
+        .video-wrapper { position: relative; border-radius: 10px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.5); width: 100%; aspect-ratio: 4/3; background: #000; }
+        .ai-view { width: 100%; aspect-ratio: 4/3; background: #34495e; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 8rem; box-shadow: 0 0 20px rgba(0,0,0,0.5); border: 2px solid #ecf0f1; }
+        video, canvas { display: block; transform: rotateY(180deg); width: 100%; height: 100%; object-fit: cover; }
         .stats { display: flex; justify-content: space-around; font-size: 1.5rem; margin: 20px; }
-        .status-box { background: rgba(0,0,0,0.6); padding: 15px; border-radius: 10px; margin: 10px auto; width: 60%; }
+        .status-box { background: rgba(0,0,0,0.6); padding: 20px; border-radius: 15px; margin: 20px auto; width: 90%; max-width: 600px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         #gesture-output { font-weight: bold; color: #f1c40f; font-size: 2rem; }
         .countdown { font-size: 8rem; color: #e74c3c; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; text-shadow: 2px 2px 4px #000; z-index: 10; }
-        .footer { margin-top: 50px; padding: 20px; font-size: 1.2rem; color: #bdc3c7; border-top: 1px solid #34495e; }
+        .about-section { margin-top: 50px; padding: 30px; background: rgba(0,0,0,0.4); border-radius: 15px; max-width: 800px; margin-left: auto; margin-right: auto; }
+        .about-section h3 { color: #f1c40f; margin-bottom: 10px; }
+        .about-section p { font-size: 1.1rem; line-height: 1.6; color: #ecf0f1; }
+        
+        @media (max-width: 768px) {
+            .game-board { flex-direction: column; }
+            .ai-view { font-size: 5rem; }
+            .countdown { font-size: 5rem; }
+            h1 { font-size: 1.8rem; }
+            .stats { font-size: 1.2rem; }
+        }
     </style>
 </head>
 <body>
@@ -30,6 +42,10 @@
     </div>
 
     <div class="status-box">
+        <div style="margin-bottom: 10px;">
+            <label for="target-score" style="font-size: 1.2rem;">Target Score: </label>
+            <input type="number" id="target-score" value="3" min="1" style="font-size: 1.2rem; width: 60px; padding: 5px; text-align: center; border-radius: 5px; border: none;">
+        </div>
         <p id="status-text">Loading AI...</p>
         <p id="gesture-output">Detected: -</p>
         <button id="start-btn" onclick="startGame()" disabled style="padding: 10px 20px; font-size: 1.2rem; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 5px;">Start Game</button>
@@ -52,8 +68,10 @@
         </div>
     </div>
 
-    <div class="footer">
-        <p>Made by Darshan</p>
+    <div class="about-section">
+        <h3>About This Game</h3>
+        <p>Experience the future of gaming with this AI-powered Rock Paper Scissors game. Using advanced computer vision, it tracks your hand gestures in real-time right in your browser.</p>
+        <p style="margin-top: 15px; font-weight: bold; color: #bdc3c7;">Made by Darshan</p>
     </div>
 
     <script>
@@ -66,6 +84,36 @@
         const countdownDisplay = document.getElementById('countdown-display');
         const aiEmoji = document.getElementById('ai-emoji');
         
+        // Sound Effects using Web Audio API
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            if (type === 'win') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.1); // C6
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'lose') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
         let playerScore = 0;
         let aiScore = 0;
         let gameState = 'IDLE'; 
@@ -108,6 +156,15 @@
         }
 
         function startGame() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (gameState === 'GAME_OVER') {
+                playerScore = 0;
+                aiScore = 0;
+                document.getElementById('player-score').innerText = '0';
+                document.getElementById('ai-score').innerText = '0';
+                startBtn.innerText = "Start Game";
+                gameState = 'IDLE';
+            }
             if (gameState !== 'IDLE') return;
             gameState = 'COUNTDOWN';
             startBtn.disabled = true;
@@ -137,6 +194,7 @@
             const moves = ['Rock', 'Paper', 'Scissors'];
             const aiMove = moves[Math.floor(Math.random() * 3)];
             const playerMove = currentGesture;
+            const targetScore = parseInt(document.getElementById('target-score').value) || 3;
             
             clearInterval(aiShuffleInterval);
             const emojiMap = {'Rock': '✊', 'Paper': '✋', 'Scissors': '✌️'};
@@ -156,14 +214,28 @@
                 result = `You Win! ${playerMove} beats ${aiMove}`;
                 playerScore++;
                 document.getElementById('player-score').innerText = playerScore;
+                playSound('win');
             } else {
                 result = `You Lose! ${aiMove} beats ${playerMove}`;
                 aiScore++;
                 document.getElementById('ai-score').innerText = aiScore;
+                playSound('lose');
+            }
+
+            if (playerScore >= targetScore) {
+                result = "🏆 VICTORY! You won the match! 🏆";
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                gameState = 'GAME_OVER';
+                startBtn.innerText = "Play Again";
+            } else if (aiScore >= targetScore) {
+                result = "💀 DEFEAT! AI won the match! 💀";
+                gameState = 'GAME_OVER';
+                startBtn.innerText = "Play Again";
+            } else {
+                gameState = 'IDLE';
             }
 
             statusText.innerText = result;
-            gameState = 'IDLE';
             startBtn.disabled = false;
         }
 
@@ -184,7 +256,7 @@
         camera.start();
         
         startBtn.disabled = false;
-        statusText.innerText = "Ready to Play!";
+        statusText.innerText = "Ready to Play now?, get ready";
     </script>
 </body>
 </html>
